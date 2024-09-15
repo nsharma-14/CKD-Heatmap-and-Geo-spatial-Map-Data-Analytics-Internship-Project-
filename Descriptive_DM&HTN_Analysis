@@ -1,0 +1,624 @@
+###Answering all the descriptive questions
+
+#Importing the required libraries
+import pandas as pd
+import numpy as np
+
+
+# List of filenames
+datafiles = ['N:\DATA FILES\HTNDM_202301Q.csv', 'N:\DATA FILES\HTNDM_202302Q.csv', 'N:\DATA FILES\HTNDM_202303Q.csv', 'N:\DATA FILES\HTNDM_202304Q.csv', 'N:\DATA FILES\HTNDM_202305Q.csv', 'N:\DATA FILES\HTNDM_202306Q.csv', 'N:\DATA FILES\HTNDM_202307Q.csv', 'N:\DATA FILES\HTNDM_202308Q.csv', 'N:\DATA FILES\HTNDM_202309Q.csv', 'N:\DATA FILES\HTNDM_202310Q.csv','N:\DATA FILES\HTNDM_202311Q.csv', 'N:\DATA FILES\HTNDM_202312Q.csv', 'N:\DATA FILES\HTNDM_202401Q.csv', 'N:\DATA FILES\HTNDM_202402Q.csv', 'N:\DATA FILES\HTNDM_202403Q.csv', 'N:\DATA FILES\HTNDM_202404Q.csv', 'N:\DATA FILES\HTNDM_202405Q.csv']
+datafiles
+
+## Fixing the number of Columns. (In the output, the number of columns were 54, but it should be 52, that means we have two extra columns, so we are fixing it here )
+
+# Inspect columns of each file
+for file in datafiles:
+    df = pd.read_csv(file, low_memory=False)
+    print(f"{file} columns: {df.columns.tolist()}")
+
+# Define the correct column names
+correct_columns = ["mbi_id_orig", "DOS","ACCESSION_NUMBER", "REQUISITION_NUMBER", "LAB_CODE","DATE_OF_COLLECTION", "EXTERNAL_PAT_ID", "PAT_STATE", "PAT_ZIP", "DATE_OF_BIRTH", "AGE", "GENDER", "BILL_CODE", 
+                   "POLICY_NUMBER", "MEDICAID_NO", "MEDICARE_NO", "PHY_NAME", "UPIN", "DIAG_CODE1", "DIAG_CODE2", "DIAG_CODE3", "DIAG_CODE4", "DIAG_CODE5", "DIAG_CODE6", "DIAG_CODE7", "DIAG_CODE8", "DIAG_CODE9", "DIAG_CODE10", 
+                   "LOCAL_PROFILE_CODE", "STANDARD_PROFILE_CODE", "PROFILE_NAME", "LOCAL_ORDER_CODE", "STANDARD_ORDER_CODE", "ORDER_NAME", "LOINC_CODE", "LOCAL_RESULT_CODE", "RESULT_NAME", "RESULT_VALUE_A", 
+                   "UNITS", "REF_RANGE_LOW", "REF_RANGE_HIGH", "REF_RANGE_ALPHA", "DERIVED_ABNORMAL_FLAG", "CPT_CODE", "COMM_TEXT", "ORDERING_SITE_CODE", "Elig_Member_Id", "npi", "unique_linker", "DM", "HTN", "DM_HTN"]  
+
+
+# Function to standardize columns
+def standardize_columns(df, correct_columns):
+    # Rename columns to match the correct ones
+    df.columns = [col.strip() for col in df.columns]
+    # Reindex DataFrame to have missing columns filled with NaN and extra columns dropped
+    return df.reindex(columns=correct_columns)
+
+# Read, standardize, and concatenate all files
+dfs = []
+for file in datafiles:
+    df = pd.read_csv(file, low_memory=False)
+    df = standardize_columns(df, correct_columns)
+    dfs.append(df)
+
+# Concatenate all DataFrames
+final_df = pd.concat(dfs, ignore_index=True)
+final_df
+
+
+#Keeping only the required column, and setting the columns as copy.
+df1 = final_df[['mbi_id_orig', 'DOS','RESULT_NAME', 'RESULT_VALUE_A', 'CPT_CODE', 'LOINC_CODE', 'ORDER_NAME','DM', 'HTN', 'DM_HTN']].copy()
+
+#Saving the dataframe to a csv file.
+df1.to_csv('Final_data.csv', index=False)
+
+#Reading the Final_data.csv as dataframe
+df = pd.read_csv("Final_data.csv")
+df
+
+#Changing the date format
+df.loc[:, 'DOS'] = pd.to_datetime(df['DOS'], format='%Y%m%d')
+
+#Replacing all the blank rows of DM_HTN with 0
+df['DM_HTN'] = df['DM_HTN'].fillna(0)
+df
+
+
+# a) For the unique patients with “DM=1” [diabetes] and/or HTN=1 [hypertension] create an overall summary of the frequency of the types of tests performed. 
+#Total data = 54775 
+#2022-2024
+
+
+# Step 1: Filter data for patients with Diabetes=1 and/or Hypertension=1
+filtered_df = df[(df['DM'] == 1) | (df['HTN'] == 1)]
+
+# step 2. Create a value of Order Name – Result Name
+filtered_df['Test_Type'] = filtered_df['ORDER_NAME'] + ' - ' + filtered_df['RESULT_NAME']
+
+# Step 3: Identify unique patients
+unique_patients_df = filtered_df.drop_duplicates(subset=['mbi_id_orig'])
+
+
+# Step 3: Aggregate the frequency of test types
+test_type_summary = unique_patients_df['Test_Type'].value_counts()
+
+test_type_summary.columns= ['Test_Type', 'Frequency']
+
+
+test_type_summary.name = 'Frequency'
+test_type_summary = test_type_summary.reset_index()
+test_type_summary.columns = ['Test_Type', 'Frequency']
+
+
+# Calculate percentages
+test_type_summary['Percent_of_Frequency'] = test_type_summary['Frequency'] / test_type_summary['Frequency'].sum() * 100
+
+# Round the Percent_of_Frequency to 2 decimal places
+test_type_summary['Percent_of_Frequency'] = test_type_summary['Percent_of_Frequency'].round(2)
+
+test_type_summary
+
+#Creating the graph for the above results
+import matplotlib.pyplot as plt
+
+# Create a DataFrame from the test_counts
+summary_df = test_type_summary[['Test_Type','Percent_of_Frequency']].reset_index()
+top_5_summary = summary_df.nlargest(5, 'Percent_of_Frequency')
+
+# Plot the frequency distribution as a bar chart
+plt.figure(figsize=(30, 15))
+
+bars = plt.bar(top_5_summary['Test_Type'], top_5_summary['Percent_of_Frequency'], color='mediumpurple')
+
+# Add labels on top of each bar
+for bar in bars:
+    yval = bar.get_height()
+    plt.annotate(f'{yval:.2f}%', 
+                 xy=(bar.get_x() + bar.get_width() / 2, yval),
+                 xytext=(0, 3),  # 3 points vertical offset
+                 textcoords="offset points",
+                 ha='center', va='bottom', fontsize=18)
+
+plt.xlabel('Test_Type', fontsize=20)
+plt.xticks(rotation=45, ha='right', fontsize=18)
+plt.ylabel('Percent_of_Frequency', fontsize=20)
+plt.yticks(fontsize=20)
+plt.title('Frequency Distribution of Types of Tests Performed', fontsize=25)
+plt.tight_layout()  # Adjust layout to prevent clipping of tick-labels
+plt.show()
+
+
+# b) For the patients with a DM=1; how many received HbA1c Tests that had a value below 9.0, at or above 9.0, or result was not presented
+#38815 total data
+#2022-2024
+
+# Step 1: Filter data for patients with Diabetes=1
+diabetes_df = df[df['DM'] == 1]
+
+# Step 2: Further filter to include only HbA1c tests
+test_names = ['HbA1c', 'HEMOGLOBIN A1c']
+hba1c_tests_df = diabetes_df[diabetes_df['RESULT_NAME'].isin(test_names)]
+
+#Converting the RESULT_VALUE_A column into numeric
+hba1c_tests_df['RESULT_VALUE_A'] = pd.to_numeric(hba1c_tests_df['RESULT_VALUE_A'], errors='coerce')
+
+#Categorizing the HbA1c values
+below_9 = hba1c_tests_df[hba1c_tests_df['RESULT_VALUE_A'] < 9.0].shape[0]
+at_or_above_9 = hba1c_tests_df[hba1c_tests_df['RESULT_VALUE_A'] >= 9.0].shape[0]
+total_patients = hba1c_tests_df.shape[0]
+# not_presented = hba1c_tests_df[hba1c_tests_df['RESULT_VALUE_A'].isna()].shape[0]
+
+# Calculate percentages
+percent_below_9 = round((below_9 / total_patients) * 100, 2)
+percent_at_or_above_9 = round((at_or_above_9 / total_patients) * 100, 2)
+
+# Print results
+print(f"Patients with HbA1c < 9.0: {percent_below_9}")
+print(f"Patients with HbA1c >= 9.0: {percent_at_or_above_9}")
+
+###Creating the graph for the above results
+
+categories = ['HbA1c < 9.0', 'HbA1c >= 9.0']
+counts = [percent_below_9, percent_at_or_above_9]
+
+plt.figure(figsize=(10, 6))
+bars = plt.bar(categories, counts, color='mediumpurple')
+
+# # Add labels on top of each bar
+# for bar in bars:
+#     yval = bar.get_height()
+#     plt.text(bar.get_x() + bar.get_width()/2, yval + 0.1, int(yval), ha='center', va='bottom', fontsize=14)
+for bar in bars:
+    yval = bar.get_height()
+    plt.annotate(f'{yval:.2f}%', 
+                 xy=(bar.get_x() + bar.get_width() / 2, yval),
+                 xytext=(0, 3),  # 3 points vertical offset
+                 textcoords="offset points",
+                 ha='center', va='bottom', fontsize=14)
+
+plt.bar(categories, counts, color='mediumpurple')
+plt.xlabel('HbA1c Test Result Category', fontsize=15)
+plt.xticks(ha='right', fontsize=15)
+plt.ylabel('Percentage', fontsize=15)
+plt.yticks(fontsize=15)
+plt.title('HbA1c Test Results for Patients with Diabetes', fontsize=20)
+plt.tight_layout()
+plt.show()
+
+# c) For patients with a DM=1, HTN=1, what were the common tests that were performed?  Frequency distribution from highest volume to lowest volume. 
+
+# Step 1: Filter data for patients with Diabetes=1 and Hypertension=1
+filtered_df = df[(df['DM'] == 1) & (df['HTN'] == 1)]
+
+# step 2. Create a value of Order Name – Result Name
+filtered_df['Test_Type'] = filtered_df['ORDER_NAME'] + ' - ' + filtered_df['RESULT_NAME']
+
+# Step 3: Count the frequency of each test type
+test_type_counts = filtered_df['Test_Type'].value_counts().reset_index()
+test_type_counts.columns = ['Test_Type', 'Common_Test_Frequency']
+
+# Step 4: Sort by frequency from highest to lowest volume
+test_type_counts = test_type_counts.sort_values(by='Common_Test_Frequency', ascending=False)
+
+# Step 5: Calculate percentages
+total_tests = test_type_counts['Common_Test_Frequency'].sum()
+test_type_counts['Percent_of_Frequency'] = (test_type_counts['Common_Test_Frequency'] / total_tests) * 100
+
+# Step 6: Round the Percent_of_Frequency to 2 decimal places
+test_type_counts['Percent_of_Frequency'] = test_type_counts['Percent_of_Frequency'].round(2)
+
+test_type_counts
+
+
+#########Additional Questions###########
+#Importing the reqired libraries
+
+import pandas as pd
+import numpy as np
+
+# List of filenames
+datafiles = ['N:\DATA FILES\HTNDM_202301Q.csv', 'N:\DATA FILES\HTNDM_202302Q.csv', 'N:\DATA FILES\HTNDM_202303Q.csv', 'N:\DATA FILES\HTNDM_202304Q.csv', 'N:\DATA FILES\HTNDM_202305Q.csv', 'N:\DATA FILES\HTNDM_202306Q.csv', 'N:\DATA FILES\HTNDM_202307Q.csv', 'N:\DATA FILES\HTNDM_202308Q.csv', 'N:\DATA FILES\HTNDM_202309Q.csv', 'N:\DATA FILES\HTNDM_202310Q.csv','N:\DATA FILES\HTNDM_202311Q.csv', 'N:\DATA FILES\HTNDM_202312Q.csv', 'N:\DATA FILES\HTNDM_202401Q.csv', 'N:\DATA FILES\HTNDM_202402Q.csv', 'N:\DATA FILES\HTNDM_202403Q.csv', 'N:\DATA FILES\HTNDM_202404Q.csv', 'N:\DATA FILES\HTNDM_202405Q.csv']
+datafiles
+
+## Fix the number of Columns. (In the output, the number of columns were 54, but it should be 52, that means we have two extra columns, so we are fixing it here )
+
+# Inspect columns of each file
+for file in datafiles:
+    df = pd.read_csv(file, low_memory=False)
+    print(f"{file} columns: {df.columns.tolist()}")
+
+# Define the correct column names
+correct_columns = ["mbi_id_orig", "DOS","ACCESSION_NUMBER", "REQUISITION_NUMBER", "LAB_CODE","DATE_OF_COLLECTION", "EXTERNAL_PAT_ID", "PAT_STATE", "PAT_ZIP", "DATE_OF_BIRTH", "AGE", "GENDER", "BILL_CODE", 
+                   "POLICY_NUMBER", "MEDICAID_NO", "MEDICARE_NO", "PHY_NAME", "UPIN", "DIAG_CODE1", "DIAG_CODE2", "DIAG_CODE3", "DIAG_CODE4", "DIAG_CODE5", "DIAG_CODE6", "DIAG_CODE7", "DIAG_CODE8", "DIAG_CODE9", "DIAG_CODE10", 
+                   "LOCAL_PROFILE_CODE", "STANDARD_PROFILE_CODE", "PROFILE_NAME", "LOCAL_ORDER_CODE", "STANDARD_ORDER_CODE", "ORDER_NAME", "LOINC_CODE", "LOCAL_RESULT_CODE", "RESULT_NAME", "RESULT_VALUE_A", 
+                   "UNITS", "REF_RANGE_LOW", "REF_RANGE_HIGH", "REF_RANGE_ALPHA", "DERIVED_ABNORMAL_FLAG", "CPT_CODE", "COMM_TEXT", "ORDERING_SITE_CODE", "Elig_Member_Id", "npi", "unique_linker", "DM", "HTN", "DM_HTN"]  
+
+
+# Function to standardize columns
+def standardize_columns(df, correct_columns):
+    # Rename columns to match the correct ones
+    df.columns = [col.strip() for col in df.columns]
+    # Reindex DataFrame to have missing columns filled with NaN and extra columns dropped
+    return df.reindex(columns=correct_columns)
+
+# Read, standardize, and concatenate all files
+dfs = []
+for file in datafiles:
+    df = pd.read_csv(file, low_memory=False)
+    df = standardize_columns(df, correct_columns)
+    dfs.append(df)
+
+# Concatenate all DataFrames
+final_df = pd.concat(dfs, ignore_index=True)
+
+final_df
+
+df1 = final_df[['mbi_id_orig', 'DOS','DATE_OF_COLLECTION', 'RESULT_NAME', 'RESULT_VALUE_A', 'CPT_CODE', 'LOINC_CODE', 'ORDER_NAME','DM', 'HTN', 'DM_HTN']].copy()
+
+#Saving the dataframe to a csv file.
+df1.to_csv('Descriptive_Analysis_data.csv', index=False)
+
+df = pd.read_csv("Descriptive_Analysis_data.csv")
+
+df
+
+#Changing the date format
+df.loc[:, 'DOS'] = pd.to_datetime(df['DOS'], format='%Y%m%d')
+df.loc[:, 'DATE_OF_COLLECTION'] = pd.to_datetime(df['DATE_OF_COLLECTION'], format='%Y%m%d')
+
+#Replacing all the blank rows of DM_HTN with 0
+df['DM_HTN'] = df['DM_HTN'].fillna(0)
+
+# Ensure Test_result_value is numeric and remove non-numeric entries
+df['RESULT_VALUE_A'] = pd.to_numeric(df['RESULT_VALUE_A'], errors='coerce')
+
+df = df.dropna(subset=['RESULT_VALUE_A'])
+df
+
+# 1)	Question:   What are the most frequent laboratory tests that are ordered for patients with Diabetes? 
+# a.	Filter to DM=1; 
+# b.	Create a value of Order Name – Result Name 
+# c.	Count distinct on Date of Collection 
+# d.	Order from Highest volume of Orders – Results, to lowest Number of Orders – Results
+
+#Total data = 140330
+#2022-2024
+
+# 1. Filter to DM=1
+df_dm = df[df['DM'] == 1]
+
+# 2. Create a value of Order Name – Result Name
+df_dm.loc[:, 'Test_Type'] = df_dm['ORDER_NAME'] + ' - ' + df_dm['RESULT_NAME']
+
+
+# 3. Group by 'Order_Result' and count distinct 'DATE_OF_COLLECTION'
+order_results_counts = df_dm.groupby('Test_Type')['DATE_OF_COLLECTION'].nunique().reset_index(name='DistinctCounts')
+
+# 4. Order from Highest volume of Orders – Results, to lowest Number of Orders – Results
+order_results_counts_sorted = order_results_counts.sort_values(by='DistinctCounts', ascending=False)
+
+order_results_counts_sorted['Percent_of_Frequency'] = order_results_counts_sorted['DistinctCounts'] / order_results_counts_sorted['DistinctCounts'].sum() * 100
+
+# Round the Percent_of_Frequency to 2 decimal places
+order_results_counts_sorted['Percent_of_Frequency'] = order_results_counts_sorted['Percent_of_Frequency'].round(2)
+
+order_results_counts_sorted
+
+
+# 2)	Question:   What are the most frequent laboratory tests that are ordered for patients with Hypertension?  
+# a.	Filter to HTN=1; 
+# b.	Create a value of Order Name – Result Name 
+# c.	Count distinct on Date of Collection 
+# d.	Order from Highest volume of Orders – Results, to lowest Number of Orders – Results
+
+# 1. Filter to HTN=1
+df_dm = df[df['HTN'] == 1]
+
+df_dm
+
+# 2. Create a value of Order Name – Result Name
+df_dm['Test_Type'] = df_dm['ORDER_NAME'] + ' - ' + df_dm['RESULT_NAME']
+
+
+# 3. Group by 'Order_Result' and count distinct 'DATE_OF_COLLECTION'
+order_results_counts = df_dm.groupby('Test_Type')['DATE_OF_COLLECTION'].nunique().reset_index(name='DistinctCounts')
+
+
+# 4. Rename the column for clarity
+order_results_counts.columns = ['Order_Result', 'DistinctCounts']
+
+# 5. Order from Highest volume of Orders – Results, to lowest Number of Orders – Results
+order_result_counts_sorted = order_results_counts.sort_values(by='DistinctCounts', ascending=False)
+
+
+# Calculate percentages
+order_results_counts_sorted['Percent_of_DistinctCounts'] = order_results_counts_sorted['DistinctCounts'] / order_results_counts_sorted['DistinctCounts'].sum() * 100
+
+# Round the Percent_of_Frequency to 2 decimal places
+order_results_counts_sorted['Percent_of_DistinctCounts'] = order_results_counts_sorted['Percent_of_DistinctCounts'].round(2)
+
+order_result_counts_sorted
+
+
+# 3)	Question:   What are the most frequent laboratory tests that are ordered for patients with both Hypertension and Diabetes?  
+# a.	Filter to HTN=1 and DM=1; 
+# b.	Create a value of Order Name – Result Name 
+# c.	Count distinct on Date of Collection 
+# d.	Order from Highest volume of Orders – Results, to lowest Number of Orders – Results
+
+# 1. Filter to HTN=1
+df_dm = df[df['DM_HTN'] == 1]
+
+df_dm
+
+# 2. Create a value of Order Name – Result Name
+df_dm['Test_Type'] = df_dm['ORDER_NAME'] + ' - ' + df_dm['RESULT_NAME']
+
+
+# 3. Group by 'Order_Result' and count distinct 'DATE_OF_COLLECTION'
+order_results_counts = df_dm.groupby('Test_Type')['DATE_OF_COLLECTION'].nunique().reset_index(name='DistinctCounts')
+
+
+# 4. Rename the column for clarity
+order_results_counts.columns = ['Order_Result', 'DistinctCounts']
+
+# 5. Order from Highest volume of Orders – Results, to lowest Number of Orders – Results
+order_result_counts_sorted = order_results_counts.sort_values(by='DistinctCounts', ascending=False)
+
+
+# Calculate percentages
+order_results_counts_sorted['Percent_of_DistinctCounts'] = order_results_counts_sorted['DistinctCounts'] / order_results_counts_sorted['DistinctCounts'].sum() * 100
+
+# Round the Percent_of_Frequency to 2 decimal places
+order_results_counts_sorted['Percent_of_DistinctCounts'] = order_results_counts_sorted['Percent_of_DistinctCounts'].round(2)
+
+order_result_counts_sorted
+
+
+# 4)	For the standardized test values – let’s start small here and this will also allow you to create a cleansed/standardized data set to do the HbA1c map and Kidney Health Heat Map: 
+# a.	For patients with Diabetes, how may had lab test values in the following ranges: 
+# i.	5.47 – 5.69 (Normal)
+# ii.	5.70 – 6.00 (Pre-Diabetes)
+# iii.	6.01 – 6.25 (Pre-Diabetes)
+# iv.	6.26 – 6.49 (Pre-Diabetes)
+# v.	6.50 – 7.21 (Diabetes) 
+# vi.	7.22 – 8.99 (Diabetes High)
+# vii.	>9.0 Diabetes Poor Control 
+# viii.	Unknown (This will be all the results that you will not be able to convert (“standardize”) to one of the categories above. 
+
+#Total data = 2067878 
+import matplotlib.pyplot as plt 
+
+# 1. Filter to DM=1
+df_dm = df[df['DM'] == 1]
+
+
+# 2. Define the function to categorize lab test values
+def categorize_lab_test(value):
+    if 5.47 <= value <= 5.69:
+        return 'Normal'
+    elif 5.70 <= value <= 6.00:
+        return 'Pre-Diabetes 1'
+    elif 6.01 <= value <= 6.25:
+        return 'Pre-Diabetes 2'
+    elif 6.26 <= value <= 6.49:
+        return 'Pre-Diabetes 3'
+    elif 6.50 <= value <= 7.21:
+        return 'Diabetes'
+    elif 7.22 <= value <= 8.99:
+        return 'Diabetes High'
+    elif value > 9.0:
+        return 'Diabetes Poor Control'
+    else:
+        return 'Unknown'
+
+
+# 3. Create a new column to categorize each lab test value
+df_dm['Category'] = df_dm['RESULT_VALUE_A'].apply(categorize_lab_test)
+
+# 4. Count the number of patients in each category
+category_counts = df_dm['Category'].value_counts().reset_index()
+category_counts.columns = ['Category', 'Count']
+
+# Calculate percentages
+category_counts['Percent_of_Frequency'] = category_counts['Count'] / category_counts['Count'].sum() * 100
+
+# Round the Percent_of_Frequency to 2 decimal places
+category_counts['Percent_of_Frequency'] = category_counts['Percent_of_Frequency'].round(2)
+
+category_counts
+
+
+# Plot the frequency distribution as a bar chart
+plt.figure(figsize=(18, 10))
+
+bars = plt.bar(category_counts['Category'], category_counts['Percent_of_Frequency'], color='mediumpurple')
+
+
+# # Add labels on top of each bar
+# for bar in bars:
+#     yval = bar.get_height()
+#     plt.text(bar.get_x() + bar.get_width()/2, yval + 0.1, int(yval), ha='center', va='bottom', fontsize=14)
+for bar in bars:
+    yval = bar.get_height()
+    plt.annotate(f'{yval:.2f}%', 
+                 xy=(bar.get_x() + bar.get_width() / 2, yval),
+                 xytext=(0, 3),  # 3 points vertical offset
+                 textcoords="offset points",
+                 ha='center', va='bottom', fontsize=14)
+
+
+# Plot the frequency distribution as a bar chart
+
+plt.bar(category_counts['Category'], category_counts['Percent_of_Frequency'], color='mediumpurple')
+plt.xlabel('Diabetes Categories', fontsize=18)
+plt.xticks(rotation=45, ha='right', fontsize=15)
+plt.ylabel('Ranges Counts', fontsize=18)
+plt.yticks(fontsize=15)
+plt.title('Frequency Distribution of Categories of Diabetes', fontsize=20)
+plt.tight_layout()
+plt.show()
+
+
+# 4(b).	For Patients with Hypertension and/or Diabetes (this will be your entire cohort), how many had lab values in the following ranges:
+# i.	GFR Categories
+# 1.	G1 Normal or High >=90
+# 2.	G2 Mildly Decreased 60-89
+# 3.	G3a Mildly-Moderately Decreased 45-59
+# 4.	G3b Moderately to severely decreased 30-44
+# 5.	G4 Severely decreased 15-29
+# 6.	G5 Kidney Failure <15
+# 7.	Unknown (This will be all the results that you will not be able to convert (“standardize”) to one of the categories above. 
+
+#Total data = 33025 
+
+
+#### Seperating EGFR values
+df_egfr = df[df['LOINC_CODE'] == '98979-8']
+
+df_final_egfr = df_egfr[['mbi_id_orig','RESULT_VALUE_A']]
+
+df_final_egfr.rename(columns={'RESULT_VALUE_A':'EGFR'}, inplace=True)
+
+#Seperating UACR values
+df_uacr = df[df['LOINC_CODE'] == '9318-7']
+
+df_final_uacr = df_uacr[['mbi_id_orig','RESULT_VALUE_A']]
+
+df_final_uacr.rename(columns={'RESULT_VALUE_A':'UACR'}, inplace=True)
+
+df_final_merged = pd.merge(df_final_egfr, df_final_uacr, on='mbi_id_orig',how='left')
+
+
+### Converting the EGFR and UACR columns into numeric datatype and dropping the null values
+
+df_final_merged['EGFR'] = pd.to_numeric(df_final_merged['EGFR'], errors='coerce')
+df_final_merged = df_final_merged.dropna(subset=['EGFR'])
+
+df_final_merged['UACR'] = pd.to_numeric(df_final_merged['UACR'], errors='coerce')
+df_final_merged = df_final_merged.dropna(subset=['UACR'])
+
+df_final_merged['DM'] = df['DM']
+
+df_final_merged['HTN'] = df['HTN']
+
+### Putting condition where DM = 1 and HTN = 1
+df_cohort = df_final_merged[(df_final_merged['DM'] == 1) | (df_final_merged['HTN'] == 1)]
+
+### 2. Define the function to categorize EGFR values
+def categorize_egfr(value):
+    if value >= 90:
+        return 'G1 Normal or High'
+    elif 60 <= value <= 89:
+        return 'G2 Mildly Decreased'
+    elif 45 <= value <= 59:
+        return 'G3a Mildly-Moderately Decreased'
+    elif 30 <= value <= 44:
+        return 'G3b Moderately to Severely Decreased'
+    elif 15 <= value <= 29:
+        return 'G4 Severely Decreased'
+    elif value < 15:
+        return 'G5 Kidney Failure'
+    else:
+        return 'Unknown'
+
+### 3. Create a new column to categorize each EGFR value
+df_cohort['EGFR_Category'] = df_cohort['EGFR'].apply(categorize_egfr)
+
+
+### 4. Count the number of patients in each EGFR category
+egfr_category_counts = df_cohort['EGFR_Category'].value_counts().reset_index()
+egfr_category_counts.columns = ['EGFR_Category', 'Count']
+
+### Calculate percentages
+egfr_category_counts['Percent_of_Frequency'] = egfr_category_counts['Count'] / egfr_category_counts['Count'].sum() * 100
+
+### Round the Percent_of_Frequency to 2 decimal places
+egfr_category_counts['Percent_of_Frequency'] = egfr_category_counts['Percent_of_Frequency'].round(2)
+
+egfr_category_counts
+
+
+### Plot the frequency distribution as a bar chart
+plt.figure(figsize=(22, 10))
+
+bars = plt.bar(egfr_category_counts['EGFR_Category'], egfr_category_counts['Percent_of_Frequency'], color='mediumpurple')
+
+for bar in bars:
+    yval = bar.get_height()
+    plt.annotate(f'{yval:.2f}%', 
+                 xy=(bar.get_x() + bar.get_width() / 2, yval),
+                 xytext=(0, 3),  # 3 points vertical offset
+                 textcoords="offset points",
+                 ha='center', va='bottom', fontsize=14)
+
+### Plot the frequency distribution as a bar chart
+
+plt.bar(egfr_category_counts['EGFR_Category'], egfr_category_counts['Percent_of_Frequency'], color='mediumpurple')
+plt.xlabel('EGFR Categories', fontsize=18)
+plt.xticks(rotation=45, ha='right', fontsize=15)
+plt.ylabel('Ranges Counts', fontsize=18)
+plt.yticks(fontsize=10)
+plt.title('Frequency Distribution of EGFR Categories for Patients', fontsize=20)
+plt.tight_layout()
+plt.show()
+
+#### 4(b)
+# ii.	Albuminuria Categories
+# 1.	A1 Normal to Mildly Increased <30 mg/g < 3 mg/mmol
+# 2.	A2 Moderately Increased 30-299 mg/g 3-29 mg/mmol
+# 3.	A3 Severely Increased ≥300 mg/g ≥30 mg/mmol
+# 4.	Unknown (This will be all the results that you will not be able to convert (“standardize”) to one of the categories above. 
+
+
+df_cohort = df_final_merged[(df_final_merged['DM'] == 1) | (df_final_merged['HTN'] == 1)]
+
+### 2. Define the function to categorize UACR values
+def categorize_uacr(value):
+    if value < 30:
+        return 'A1 Normal to Mildly Increased'
+    elif 30 <= value <= 299:
+        return 'A2 Moderately Increased'
+    elif value >= 300:
+        return 'A3 Severely Increased'
+    else:
+        return 'Unknown'
+
+### 3. Create a new column to categorize each EGFR value
+df_cohort['UACR_Category'] = df_cohort['UACR'].apply(categorize_uacr)
+
+
+### 4. Count the number of patients in each EGFR category
+uacr_category_counts = df_cohort['UACR_Category'].value_counts().reset_index()
+uacr_category_counts.columns = ['UACR_Category', 'Count']
+
+### Calculate percentages
+uacr_category_counts['Percent_of_Frequency'] = uacr_category_counts['Count'] / uacr_category_counts['Count'].sum() * 100
+
+### Round the Percent_of_Frequency to 2 decimal places
+uacr_category_counts['Percent_of_Frequency'] = uacr_category_counts['Percent_of_Frequency'].round(2)
+
+uacr_category_counts
+
+
+#### Plot the frequency distribution as a bar chart
+plt.figure(figsize=(18, 10))
+
+bars = plt.bar(uacr_category_counts['UACR_Category'], uacr_category_counts['Percent_of_Frequency'], color='mediumpurple')
+
+for bar in bars:
+    yval = bar.get_height()
+    plt.annotate(f'{yval:.2f}%', 
+                 xy=(bar.get_x() + bar.get_width() / 2, yval),
+                 xytext=(0, 3),  # 3 points vertical offset
+                 textcoords="offset points",
+                 ha='center', va='bottom', fontsize=14)
+
+### Plot the frequency distribution as a bar chart
+
+plt.bar(uacr_category_counts['UACR_Category'], uacr_category_counts['Percent_of_Frequency'], color='mediumpurple')
+plt.xlabel('UACR Categories', fontsize=18)
+plt.xticks(rotation=45, ha='right', fontsize=16)
+plt.ylabel('Ranges Counts', fontsize=18)
+plt.yticks(fontsize=15)
+plt.title('Frequency Distribution of UACR Categories for Patients', fontsize=20)
+plt.tight_layout()
+plt.show()
+
+ 
