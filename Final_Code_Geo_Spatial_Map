@@ -1,0 +1,198 @@
+##### Final code for Geo-Spatial Maps #######
+
+#Importing the reqired libraries
+import pandas as pd
+import numpy as np
+
+
+# List of filenames
+datafiles = ['N:\DATA FILES\HTNDM_202301Q.csv', 'N:\DATA FILES\HTNDM_202302Q.csv', 'N:\DATA FILES\HTNDM_202303Q.csv', 'N:\DATA FILES\HTNDM_202304Q.csv', 'N:\DATA FILES\HTNDM_202305Q.csv', 'N:\DATA FILES\HTNDM_202306Q.csv', 'N:\DATA FILES\HTNDM_202307Q.csv', 'N:\DATA FILES\HTNDM_202308Q.csv', 'N:\DATA FILES\HTNDM_202309Q.csv', 'N:\DATA FILES\HTNDM_202310Q.csv','N:\DATA FILES\HTNDM_202311Q.csv', 'N:\DATA FILES\HTNDM_202312Q.csv', 'N:\DATA FILES\HTNDM_202401Q.csv', 'N:\DATA FILES\HTNDM_202402Q.csv', 'N:\DATA FILES\HTNDM_202403Q.csv', 'N:\DATA FILES\HTNDM_202404Q.csv', 'N:\DATA FILES\HTNDM_202405Q.csv']
+
+datafiles
+
+## Fixixng the number of Columns. (In the output, the number of columns were 54, but it should be 52, that means we have two extra columns, so we are fixing it here )
+
+# Inspect columns of each file
+for file in datafiles:
+    df = pd.read_csv(file, low_memory=False)
+    print(f"{file} columns: {df.columns.tolist()}")
+
+# Define the correct column names
+correct_columns = ["mbi_id_orig", "DOS","ACCESSION_NUMBER", "REQUISITION_NUMBER", "LAB_CODE","DATE_OF_COLLECTION", "EXTERNAL_PAT_ID", "PAT_STATE", "PAT_ZIP", "DATE_OF_BIRTH", "AGE", "GENDER", "BILL_CODE", 
+                   "POLICY_NUMBER", "MEDICAID_NO", "MEDICARE_NO", "PHY_NAME", "UPIN", "DIAG_CODE1", "DIAG_CODE2", "DIAG_CODE3", "DIAG_CODE4", "DIAG_CODE5", "DIAG_CODE6", "DIAG_CODE7", "DIAG_CODE8", "DIAG_CODE9", "DIAG_CODE10", 
+                   "LOCAL_PROFILE_CODE", "STANDARD_PROFILE_CODE", "PROFILE_NAME", "LOCAL_ORDER_CODE", "STANDARD_ORDER_CODE", "ORDER_NAME", "LOINC_CODE", "LOCAL_RESULT_CODE", "RESULT_NAME", "RESULT_VALUE_A", 
+                   "UNITS", "REF_RANGE_LOW", "REF_RANGE_HIGH", "REF_RANGE_ALPHA", "DERIVED_ABNORMAL_FLAG", "CPT_CODE", "COMM_TEXT", "ORDERING_SITE_CODE", "Elig_Member_Id", "npi", "unique_linker", "DM", "HTN", "DM_HTN"]  
+
+
+
+# Function to standardize columns
+def standardize_columns(df, correct_columns):
+    # Rename columns to match the correct ones
+    df.columns = [col.strip() for col in df.columns]
+    # Reindex DataFrame to have missing columns filled with NaN and extra columns dropped
+    return df.reindex(columns=correct_columns)
+
+
+
+# Read, standardize, and concatenate all files
+dfs = []
+for file in datafiles:
+    df = pd.read_csv(file, low_memory=False)
+    df = standardize_columns(df, correct_columns)
+    dfs.append(df)
+
+# Concatenate all DataFrames
+final_df = pd.concat(dfs, ignore_index=True)
+
+final_df
+
+#Keeping only the required column, and setting the columns as copy.
+
+df1 = final_df[['mbi_id_orig', 'DOS','RESULT_NAME', 'PAT_STATE', 'PAT_ZIP', 'AGE', 'RESULT_VALUE_A','DM', 'HTN', 'DM_HTN']].copy()
+
+#Saving the dataframe to a csv file.
+df1.to_csv('GeoSpatial_Map_Data.csv', index=False)
+
+#Importing the reqired libraries
+
+import pandas as pd
+import numpy as np
+
+#Reading the GeoSpatial_Map_Data dile as a dataframe
+new_df = pd.read_csv("GeoSpatial_Map_Data.csv")
+
+new_df
+
+
+#Changing the date format
+new_df.loc[:, 'DOS'] = pd.to_datetime(new_df['DOS'], format='%Y%m%d')
+
+#Replacing all the blank rows of DM_HTN with 0
+new_df['DM_HTN'] = new_df['DM_HTN'].fillna(0)
+
+new_df
+
+
+# Filter for Hemoglobin A1c tests
+df_hba1c = new_df[new_df['RESULT_NAME'] == 'HEMOGLOBIN A1c']
+
+# Filter for patients with Diabetes (DM = 1)
+df_hba1c = df_hba1c[df_hba1c['DM'] == 1]
+
+df_hba1c
+
+
+#Sorting the data based on DOS and dropping the duplicate mbi_id_orig to keep the unique patients.
+df_hba1c = df_hba1c.sort_values('DOS').drop_duplicates('mbi_id_orig', keep = 'last')
+
+df_hba1c
+
+
+# Ensure Test_result_value is numeric and remove non-numeric entries
+df_hba1c['RESULT_VALUE_A'] = pd.to_numeric(df_hba1c['RESULT_VALUE_A'], errors='coerce')
+
+df_hba1c = df_hba1c.dropna(subset=['RESULT_VALUE_A'])
+
+df_hba1c
+
+
+#dropping null values form PAT_STATE and PAT_ZIP column.
+df_hba1c = df_hba1c.dropna(subset=['PAT_STATE'])
+df_hba1c = df_hba1c.dropna(subset=['PAT_ZIP'])
+
+df_hba1c
+
+
+#Coverting the PAT_ZIP into string to remove the Zip codes, which are greater than 5 digits
+df_hba1c['PAT_ZIP'] = df_hba1c['PAT_ZIP'].astype(str)
+
+df_hba1c['PAT_ZIP'] = df_hba1c['PAT_ZIP'].apply(lambda x: x[:5] if pd.notnull(x) else x)
+
+
+# Convert zip_code to numeric, setting errors='coerce' to convert non-numeric values to NaN
+df_hba1c['PAT_ZIP'] = pd.to_numeric(df_hba1c['PAT_ZIP'], errors='coerce')
+
+# Finally, convert to integer
+df_hba1c['PAT_ZIP'] = df_hba1c['PAT_ZIP'].astype(int)
+
+#The final dataframe that contains the data to create the Geo Spatial map
+df_hba1c
+
+
+#The final Geo Spatial data in csv
+df_hba1c.to_csv('Final_GeoSpatial_Map_Data.csv', index=False)
+
+
+
+####### Validation Check #######
+
+df_hba1c
+
+### Group by 'PAT_STATE' and 'PAT_ZIP' and calculate the average of 'RESULT_VALUE_A' and 'AGE'
+# Also, count the 'mbi_id_org'
+average_values = df_hba1c.groupby(['PAT_STATE', 'PAT_ZIP']).agg({
+    'RESULT_VALUE_A': 'mean',
+    'AGE': 'mean',
+    'mbi_id_orig': 'count'
+}).reset_index()
+average_values
+
+
+### Define the function to categorize based on the average Result_Value_A
+def categorize_a1c(avg_value):
+    if 5.47 <= avg_value <= 5.69:
+        return 'Normal'
+    elif 5.70 <= avg_value <= 6.00:
+        return 'Pre-Diabetes'
+    elif 6.01 <= avg_value <= 6.25:
+        return 'Pre-Diabetes'
+    elif 6.26 <= avg_value <= 6.49:
+        return 'Pre-Diabetes'
+    elif 6.50 <= avg_value <= 7.21:
+        return 'Diabetes'
+    elif 7.22 <= avg_value <= 8.99:
+        return 'Diabetes High'
+    elif avg_value >= 9.0:
+        return 'Diabetes Poor Control'
+    else:
+        return 'Unknown'
+
+### Apply the function to the average values
+average_values['A1c_Category'] = average_values['RESULT_VALUE_A'].apply(categorize_a1c)
+
+### Print the resulting DataFrame
+print(average_values)
+
+
+### Filter the DataFrame for 'MD' state
+md_values = average_values[average_values['PAT_STATE'] == 'MD']
+md_values
+
+
+### Group by 'PAT_STATE' and calculate the average of 'RESULT_VALUE_A' and 'AGE'
+average_values_by_state = df_hba1c.groupby('PAT_STATE').agg({
+    'RESULT_VALUE_A': 'mean',
+    'AGE': 'mean'
+}).reset_index()
+
+average_values_by_state
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
