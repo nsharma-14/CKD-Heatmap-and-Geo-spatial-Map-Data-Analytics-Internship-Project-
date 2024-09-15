@@ -1,0 +1,209 @@
+### Final Code for CKD Heatmap
+
+#Importing the required libraries
+import pandas as pd
+import numpy as np
+
+
+# List of filenames
+datafiles = ['N:\DATA FILES\HTNDM_202301Q.csv', 'N:\DATA FILES\HTNDM_202302Q.csv', 'N:\DATA FILES\HTNDM_202303Q.csv', 'N:\DATA FILES\HTNDM_202304Q.csv', 'N:\DATA FILES\HTNDM_202305Q.csv', 'N:\DATA FILES\HTNDM_202306Q.csv', 'N:\DATA FILES\HTNDM_202307Q.csv', 'N:\DATA FILES\HTNDM_202308Q.csv', 'N:\DATA FILES\HTNDM_202309Q.csv', 'N:\DATA FILES\HTNDM_202310Q.csv','N:\DATA FILES\HTNDM_202311Q.csv', 'N:\DATA FILES\HTNDM_202312Q.csv', 'N:\DATA FILES\HTNDM_202401Q.csv', 'N:\DATA FILES\HTNDM_202402Q.csv', 'N:\DATA FILES\HTNDM_202403Q.csv', 'N:\DATA FILES\HTNDM_202404Q.csv', 'N:\DATA FILES\HTNDM_202405Q.csv']
+
+#Displaying the List of Filenames
+datafiles
+
+## Fixixng the number of Columns. (In the output, the number of columns were 54, but it should be 52, that means we have two extra columns, so we are fixing it here )
+
+# Inspect columns of each file
+for file in datafiles:
+    df = pd.read_csv(file, low_memory=False)
+    print(f"{file} columns: {df.columns.tolist()}")
+
+# Define the correct column names
+correct_columns = ["mbi_id_orig", "DOS","ACCESSION_NUMBER", "REQUISITION_NUMBER", "LAB_CODE","DATE_OF_COLLECTION", "EXTERNAL_PAT_ID", "PAT_STATE", "PAT_ZIP", "DATE_OF_BIRTH", "AGE", "GENDER", "BILL_CODE", 
+                   "POLICY_NUMBER", "MEDICAID_NO", "MEDICARE_NO", "PHY_NAME", "UPIN", "DIAG_CODE1", "DIAG_CODE2", "DIAG_CODE3", "DIAG_CODE4", "DIAG_CODE5", "DIAG_CODE6", "DIAG_CODE7", "DIAG_CODE8", "DIAG_CODE9", "DIAG_CODE10", 
+                   "LOCAL_PROFILE_CODE", "STANDARD_PROFILE_CODE", "PROFILE_NAME", "LOCAL_ORDER_CODE", "STANDARD_ORDER_CODE", "ORDER_NAME", "LOINC_CODE", "LOCAL_RESULT_CODE", "RESULT_NAME", "RESULT_VALUE_A", 
+                   "UNITS", "REF_RANGE_LOW", "REF_RANGE_HIGH", "REF_RANGE_ALPHA", "DERIVED_ABNORMAL_FLAG", "CPT_CODE", "COMM_TEXT", "ORDERING_SITE_CODE", "Elig_Member_Id", "npi", "unique_linker", "DM", "HTN", "DM_HTN"]  
+
+
+
+# Function to standardize columns
+def standardize_columns(df, correct_columns):
+    # Rename columns to match the correct ones
+    df.columns = [col.strip() for col in df.columns]
+    # Reindex DataFrame to have missing columns filled with NaN and extra columns dropped
+    return df.reindex(columns=correct_columns)
+
+
+# Read, standardize, and concatenate all files
+dfs = []
+for file in datafiles:
+    df = pd.read_csv(file, low_memory=False)
+    df = standardize_columns(df, correct_columns)
+    dfs.append(df)
+
+# Concatenate all DataFrames
+final_df = pd.concat(dfs, ignore_index=True)
+
+final_df
+
+#Showing all the final columns of all the concatenated files
+final_df.columns
+
+#Datatypes of all the fields
+final_df.dtypes
+
+#The standard summary description of the data
+final_df.describe()
+
+#Keeping only the required column, and setting the columns as copy.
+
+df1 = final_df[['mbi_id_orig', 'DOS','RESULT_NAME', 'RESULT_VALUE_A', 'CPT_CODE', 'LOINC_CODE', 'ORDER_NAME','DM', 'HTN', 'DM_HTN']].copy()
+
+#Saving the dataframe to a csv file.
+df1.to_csv('Final_data.csv', index=False)
+
+
+#Importing required libraries
+import pandas as pd
+import numpy as np
+
+
+#Reading the Final_data.csv file as dataframe
+df = pd.read_csv("Final_data.csv")
+df
+
+
+#Changing the date format
+df.loc[:, 'DOS'] = pd.to_datetime(df['DOS'], format='%Y%m%d')
+
+#Seperating EGFR values based on LOIN_CODE
+df_egfr = df[df['LOINC_CODE'] == '98979-8']
+df_egfr
+
+
+###Dropping the duplicates based on mbi_id_org and sorting the value based on DOS
+
+df_egfr = df_egfr.sort_values('DOS').drop_duplicates('mbi_id_orig', keep = 'last')
+
+df_final_egfr = df_egfr[['mbi_id_orig','DOS','RESULT_VALUE_A']]
+
+###Renaming the column to EGFR
+
+df_final_egfr.rename(columns={'RESULT_VALUE_A':'EGFR'}, inplace=True)
+df_final_egfr
+
+#Seperating UACR values
+df_uacr = df[df['LOINC_CODE'] == '9318-7']
+
+##Dropping the duplicates based on mbi_id_org and sorting the value based on DOS
+
+df_uacr = df_uacr.sort_values('DOS').drop_duplicates('mbi_id_orig', keep = 'last')
+df_final_uacr = df_uacr[['mbi_id_orig','DOS','RESULT_VALUE_A']]
+
+#Renaming the column to UACR
+df_final_uacr.rename(columns={'RESULT_VALUE_A':'UACR'}, inplace=True)
+
+df_final_uacr
+
+#Merging the two dataframes
+df_final = pd.merge(df_final_egfr, df_final_uacr, on='mbi_id_orig',how='left', suffixes=('_egfr', '_uacr'))
+df_final
+
+#Validiation test : if we have the UACR null values, we are checking the mbi_id_org exist in the df_final_uacr dataframe.
+df_final_uacr[df_final_uacr['mbi_id_orig'] == '4CW3VA9CN96']
+
+#Converting the EGFR column into numeric datatype and dropping the null values
+df_final['EGFR'] = pd.to_numeric(df_final['EGFR'], errors='coerce')
+df_final = df_final.dropna(subset=['EGFR'])
+
+#Converting the UACR columns into numeric datatype and dropping the null values
+df_final['UACR'] = pd.to_numeric(df_final['UACR'], errors='coerce')
+df_final = df_final.dropna(subset=['UACR'])
+
+df_final
+
+
+# Creating CKD_Stage based on EGFR values
+conditions_ckd = [
+    (df_final['EGFR'] >= 90),
+    (df_final['EGFR'] >= 60) & (df_final['EGFR'] < 90),
+    (df_final['EGFR'] >= 45) & (df_final['EGFR'] < 60),
+    (df_final['EGFR'] >= 30) & (df_final['EGFR'] < 45),
+    (df_final['EGFR'] >= 15) & (df_final['EGFR'] < 30),
+    (df_final['EGFR'] < 15)
+]
+
+choices_ckd = ['G1', 'G2', 'G3a', 'G3b', 'G4', 'G5']
+df_final['CKD_Stage'] = np.select(conditions_ckd, choices_ckd, default='nan')
+
+# Create UACR_Level based on UACR values
+conditions_uacr = [
+    (df_final['UACR'] <= 30),
+    (df_final['UACR'] > 30) & (df_final['UACR'] <= 301),
+    (df_final['UACR'] > 300)
+]
+
+choices_uacr = ['A1', 'A2', 'A3']
+df_final['UACR_Level'] = np.select(conditions_uacr, choices_uacr, default='nan')
+
+
+###The final dataframe for CKD Heatmap
+df_final
+
+#Coverting the df_final into csv file to create the CKD Heatmap
+df_final.to_csv('EGFR_UACR.csv', index=False)
+
+
+######## Validation check #########
+
+# Define the function
+def determine_score(ckd_stage, uacr_level):
+    if ckd_stage in ('G1', 'G2') and uacr_level == 'A1':
+        return 1
+    elif (ckd_stage == 'G3a' and uacr_level == 'A1') or (ckd_stage in ('G1', 'G2') and uacr_level == 'A2'):
+        return 2
+    elif (ckd_stage == 'G3b' and uacr_level == 'A1') or (ckd_stage == 'G3a' and uacr_level == 'A2') or (ckd_stage in ('G1', 'G2') and uacr_level == 'A3'):
+        return 3
+    else:
+        return 4
+
+# Apply the function to the DataFrame
+df_final['CKD Crosswalk'] = df_final.apply(lambda row: determine_score(row['CKD_Stage'], row['UACR_Level']), axis=1)
+df_final
+
+df_final['CKD Crosswalk'].unique()
+
+
+# Get the count of each unique value in 'CKD Crosswalk'
+value_counts = df_final['CKD Crosswalk'].value_counts()
+value_counts
+
+
+# Group by the columns and count the occurrences
+counts = df_final.groupby(['CKD_Stage', 'UACR_Level', 'CKD Crosswalk']).size().reset_index(name='Count')
+# Print the resulting DataFrame
+print(counts)
+
+
+#Validation : Checking if we have any values of G5A1
+df_final['new_column'] = df_final['CKD_Stage'] + df_final['UACR_Level']
+
+df_final['new_column'].unique()
+# there are no values, therefore our data is correct.
+
+
+#Validating the min and max dos for egfr and uacr
+df_final['DOS_egfr'].min()
+
+df_final['DOS_uacr'].min()
+
+df_final['DOS_uacr'].max()
+
+df_final['DOS_uacr'].max()
+
+
+
+
+
+
+
